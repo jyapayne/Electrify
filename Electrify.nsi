@@ -74,14 +74,14 @@ InstallDirRegKey HKLM "${PRODUCT_DIR_REGKEY}" ""
 ShowInstDetails show
 ShowUnInstDetails show
 
-Section "Electrifycutable" SEC01
+Section "Electrify" SEC01
   SectionIn RO
   SetOutPath "$INSTDIR"
   SetOverwrite try
   File /r /x compressors "ElectrifyWin\"
   
-  CreateDirectory "$LocalAppData\Electrifycutable\Electrifycutable\files\compressors"
-  SetOutPath "$LocalAppData\Electrifycutable\Electrifycutable\files\compressors"
+  CreateDirectory "$LocalAppData\Electrify\Electrify\files\compressors"
+  SetOutPath "$LocalAppData\Electrify\Electrify\files\compressors"
   File "ElectrifyWin\files\compressors\upx-win.exe"
 
   ; Shortcuts

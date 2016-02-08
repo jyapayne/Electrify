@@ -7,28 +7,28 @@ rm -rf ElectrifyMac-CMD/files
 pyinstaller --hidden-import PIL.Jpeg2KImagePlugin --hidden-import configobj --hidden-import pkg_resources --distpath ElectrifyMac-CMD --onefile -n electrify-mac command_line.py
 cp -rf files ElectrifyMac-CMD/files/
 
-rm -rf build dist Electrifycutable.app
+rm -rf build dist Electrify.app
 
 #sudo python build_mac_setup.py py2app --iconfile icon.icns 
-pyinstaller -w --hidden-import PIL.Jpeg2KImagePlugin --hidden-import PyQt4 --hidden-import PIL --hidden-import configobj --hidden-import pkg_resources --distpath ElectrifyMac --onefile -n Electrifycutable main.py
+pyinstaller -w --hidden-import PIL.Jpeg2KImagePlugin --hidden-import PyQt4 --hidden-import PIL --hidden-import configobj --hidden-import pkg_resources --distpath ElectrifyMac --onefile -n Electrify main.py
 
-#sudo chown -R joey dist/Electrifycutable.app
+#sudo chown -R joey dist/Electrify.app
 #sudo chown -R joey dist/ build/
-#mv dist/Electrifycutable.app Electrifycutable.app
+#mv dist/Electrify.app Electrify.app
 
-mv ElectrifyMac/Electrifycutable.app .
+mv ElectrifyMac/Electrify.app .
 
-#rm -rf Electrifycutable.app/Contents/Frameworks/QtDesigner*
-#rm -rf Electrifycutable.app/Contents/Frameworks/QtXml*
-#rm -rf Electrifycutable.app/Contents/Frameworks/QtWebKit*
-#rm -rf Electrifycutable.app/Contents/Frameworks/QtScript*
+#rm -rf Electrify.app/Contents/Frameworks/QtDesigner*
+#rm -rf Electrify.app/Contents/Frameworks/QtXml*
+#rm -rf Electrify.app/Contents/Frameworks/QtWebKit*
+#rm -rf Electrify.app/Contents/Frameworks/QtScript*
 
-cp icon.icns Electrifycutable.app/Contents/Resources/icon-windowed.icns
-cp -rf files Electrifycutable.app/Contents/MacOS/
+cp icon.icns Electrify.app/Contents/Resources/icon-windowed.icns
+cp -rf files Electrify.app/Contents/MacOS/
 
 rm -rf build dist
 
 /Applications/Keka.app/Contents/Resources/keka7z a -r ElectrifyMac-CMD.zip ElectrifyMac-CMD
-/Applications/Keka.app/Contents/Resources/keka7z a -r ElectrifyMac-${VERSION}.zip Electrifycutable.app
+/Applications/Keka.app/Contents/Resources/keka7z a -r ElectrifyMac-${VERSION}.zip Electrify.app
 
-python upload_release.py
+python3.4 upload_release.py

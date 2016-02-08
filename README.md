@@ -7,7 +7,7 @@ Electrify
 What is it?
 -----------
 
-From the creator of [Web2Executable](https://github.com/jyapayne/Electrifycutable) comes Electrify, another friendly command line and GUI application that can transform your Nodejs (or any other JS/HTML) app into a standalone executable. The difference is that it is now powered by [Electron](https://github.com/atom/electron) instead of NW.js. It can export to Mac OS X, Windows and Linux all from one platform, so no need to go out and buy expensive hardware.
+From the creator of [Web2Executable](https://github.com/jyapayne/Web2Executable) comes Electrify, another friendly command line and GUI application that can transform your Nodejs (or any other JS/HTML) app into a standalone executable. The difference is that it is now powered by [Electron](https://github.com/atom/electron) instead of NW.js. It can export to Mac OS X, Windows and Linux all from one platform, so no need to go out and buy expensive hardware.
 
 It's powered by the very awesome project [Electron](https://github.com/atom/electron) and PySide, is open source, and is just dang awesome and easy to use.
 
