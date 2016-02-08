@@ -30,6 +30,7 @@ import logging
 import logging.handlers as lh
 import plistlib
 import codecs
+import requests
 from pprint import pprint
 
 from utils import get_data_path, get_data_file_path
@@ -128,19 +129,41 @@ class Setting(object):
         self.scope = kwargs.pop('scope', 'local')
 
         self.default_value = kwargs.pop('default_value', None)
+        self.label_suffix = kwargs.pop('label_suffix', '')
         self.button = kwargs.pop('button', None)
         self.button_callback = kwargs.pop('button_callback', None)
         self.description = kwargs.pop('description', u'')
         self.values = kwargs.pop('values', [])
+        self.exists = kwargs.pop('exists', True)
         self.filter = kwargs.pop('filter', '.*')
+        self.factor = kwargs.pop('factor', 1)
         self.filter_action = kwargs.pop('filter_action', 'None')
         self.check_action = kwargs.pop('check_action', 'None')
         self.action = kwargs.pop('action', None)
+
+        convert = kwargs.pop('convert', lambda x: x)
+        if not callable(convert):
+            convert = eval(convert)
+
+        def conv(x):
+            try:
+                x = convert(x)
+            except ValueError:
+                x = convert(float(x))
+
+            if isinstance(x, (int, float)) and not isinstance(x, bool):
+                x = x/self.factor
+            return convert(x)
+
+        self.convert = conv
 
         self.set_extra_attributes_from_keyword_args(**kwargs)
 
         if self.value is None:
             self.value = self.default_value
+
+        if self.value:
+            self.value = self.convert(self.value)
 
         self.save_path = kwargs.pop('save_path', u'')
 
@@ -187,11 +210,6 @@ class Setting(object):
 
         return ''
 
-    def extract_file_path(self, version):
-        if self.extract_file:
-            return self.extract_file.format(version)
-        return u''
-
     def set_extra_attributes_from_keyword_args(self, **kwargs):
         for undefined_key, undefined_value in kwargs.items():
             setattr(self, undefined_key, undefined_value)
@@ -229,47 +247,6 @@ class Setting(object):
                 utils.move(abs_file, ex_path)
             utils.rmtree(dir_name, ignore_errors=True)
 
-    def get_file_bytes(self, version):
-        fbytes = []
-
-        path = self.save_file_path(version)
-
-        file = self.extract_class(path,
-                                  *self.extract_args)
-        for extract_path, dest_path in zip(self.extract_files,
-                                           self.dest_files):
-            new_bytes = None
-            try:
-                extract_p = extract_path.format(version)
-
-                versions = re.findall('(\d+)\.(\d+)\.(\d+)', version)[0]
-
-                minor = int(versions[1])
-                if minor >= 12:
-                    extract_p = extract_p.replace('node-webkit', 'nwjs')
-
-                if self.file_ext == '.gz':
-                    new_bytes = file.extractfile(extract_p).read()
-                elif self.file_ext == '.zip':
-                    new_bytes = file.read(extract_p)
-            except KeyError as e:
-                logger.error(str(e))
-                # dirty hack to support old versions of nw
-                if 'no item named' in str(e):
-                    extract_path = '/'.join(extract_path.split('/')[1:])
-                    try:
-                        if self.file_ext == '.gz':
-                            new_bytes = file.extractfile(extract_path).read()
-                        elif self.file_ext == '.zip':
-                            new_bytes = file.read(extract_path)
-                    except KeyError as e:
-                        logger.error(str(e))
-
-            if new_bytes is not None:
-                fbytes.append((dest_path, new_bytes))
-
-        return fbytes
-
     def __repr__(self):
         url = ''
         if hasattr(self, 'url'):
@@ -291,6 +268,8 @@ class CommandBase(object):
         self.logger = None
         self.output_package_json = True
         self.settings = self.get_settings()
+        self.js_cmd_args = ''
+        self.js_window_init = ''
         self._project_dir = ''
         self._output_dir = ''
         self._progress_text = ''
@@ -301,28 +280,28 @@ class CommandBase(object):
 
     def init(self):
         self.logger = logging.getLogger('CMD logger')
-        self.update_nw_versions(None)
-        self.setup_nw_versions()
+        self.update_electron_versions(None)
+        self.setup_electron_versions()
 
-    def update_nw_versions(self, button):
+    def update_electron_versions(self, button):
         self.progress_text = 'Updating nw versions...'
         self.get_versions()
         self.progress_text = '\nDone.\n'
 
-    def setup_nw_versions(self):
-        nw_version = self.get_setting('nw_version')
-        nw_version.values = []
+    def setup_electron_versions(self):
+        electron_version = self.get_setting('electron_version')
+        electron_version.values = []
         try:
-            f = codecs.open(get_data_file_path('files/nw-versions.txt'), encoding='utf-8')
+            f = codecs.open(get_data_file_path('files/electron-versions.txt'), encoding='utf-8')
             for line in f:
-                nw_version.values.append(line.strip())
+                electron_version.values.append(line.strip())
             f.close()
         except IOError:
-            nw_version.values.append(nw_version.default_value)
+            electron_version.values.append(electron_version.default_value)
 
-    def get_nw_versions(self):
-        nw_version = self.get_setting('nw_version')
-        return nw_version.values[:]
+    def get_electron_versions(self):
+        electron_version = self.get_setting('electron_version')
+        return electron_version.values[:]
 
     def get_settings(self):
         config_file = get_file('files/settings.cfg')
@@ -401,30 +380,30 @@ class CommandBase(object):
 
         union_versions = set()
 
-        for url in self.settings['version_info']['urls']:
-            response = request.urlopen(url)
-            html = response.read().decode('utf-8')
+        url = self.settings['version_info']['electron_url']
 
-            nw_version = self.get_setting('nw_version')
+        req = requests.get(url)
 
-            old_versions = set(nw_version.values)
-            old_versions = old_versions.union(union_versions)
-            new_versions = set(re.findall('(\S+) / \S+', html))
+        data = json.loads(req.text)
 
-            union_versions = old_versions.union(new_versions)
+        versions = [d['name'].split(' ')[-1][1:] for d in data]
+
+        electron_version = self.get_setting('electron_version')
+
+        old_versions = set(electron_version.values)
+        old_versions = old_versions.union(union_versions)
+        new_versions = set(versions)
+
+        union_versions = old_versions.union(new_versions)
 
         versions = sorted(union_versions,
                           key=Version, reverse=True)
 
-        if len(versions) > 19:
-            #Cut off old versions
-            versions = versions[:-19]
-
-        nw_version.values = versions
+        electron_version.values = versions
         f = None
         try:
-            f = codecs.open(get_data_file_path('files/nw-versions.txt'), 'w', encoding='utf-8')
-            for v in nw_version.values:
+            f = codecs.open(get_data_file_path('files/electron-versions.txt'), 'w', encoding='utf-8')
+            for v in electron_version.values:
                 f.write(v+os.linesep)
             f.close()
         except IOError:
@@ -443,10 +422,6 @@ class CommandBase(object):
         version = self.selected_version()
         path = setting.url.format(version, version)
         versions = re.findall('(\d+)\.(\d+)\.(\d+)', version)[0]
-
-        minor = int(versions[1])
-        if minor >= 12:
-            path = path.replace('node-webkit', 'nwjs')
 
         try:
             return self.download_file(setting.url.format(version, version),
@@ -467,7 +442,7 @@ class CommandBase(object):
             p_json = [json_path]
         else:
             p_json = glob.glob(utils.path_join(self.project_dir(),
-                                            'package.json'))
+                                               'package.json'))
         setting_list = []
         if p_json:
             json_str = ''
@@ -486,10 +461,11 @@ class CommandBase(object):
     def generate_json(self, global_json=False):
         self.logger.info('Generating package.json...')
 
-        dic = {'webexe_settings': {}}
+        dic = {'webexe_settings': {},
+               'web_preferences': {}}
 
         if not global_json:
-            dic.update({'webkit': {}, 'window': {}})
+            dic.update({'webkit': {}, 'window': {}, 'web': {}})
             dic.update(self.original_packagejson)
             for setting_name, setting in self.settings['app_settings'].items():
                 if setting.value is not None:
@@ -499,17 +475,15 @@ class CommandBase(object):
 
             for setting_name, setting in self.settings['window_settings'].items():
                 if setting.value is not None:
-                    if 'height' in setting.name or 'width' in setting.name:
-                        try:
-                            dic['window'][setting_name] = int(setting.value)
-                        except ValueError:
-                            pass
-                    else:
-                        dic['window'][setting_name] = setting.value
+                    dic['window'][setting_name] = setting.value
 
             for setting_name, setting in self.settings['webkit_settings'].items():
                 if setting.value is not None:
                     dic['webkit'][setting_name] = setting.value
+
+            for setting_name, setting in self.settings['web_preferences'].items():
+                if setting.value is not None:
+                    dic['web'][setting_name] = setting.value
 
         if not global_json:
             dl_export_items = (list(self.settings['download_settings'].items()) +
@@ -524,6 +498,33 @@ class CommandBase(object):
         for setting_name, setting in dl_export_items:
             if setting.value is not None:
                 dic['webexe_settings'][setting_name] = setting.value
+
+        dic['main'] = 'main.js'
+
+        js_settings = {'webPreferences': {}}
+
+        for setting_name, setting in self.settings['window_settings'].items():
+            js_settings[utils.to_camel_case(setting_name)] = setting.convert(setting.value)
+
+        for setting_name, setting in self.settings['web_preferences'].items():
+            js_settings['webPreferences'][utils.to_camel_case(setting_name)] = setting.convert(setting.value)
+
+        ignored_app_settings = set(['main_html', 'app_name', 'description', 'version', 'user_agent'])
+
+        self.js_cmd_args = ''
+
+        for setting_name, setting in self.settings['app_settings'].items():
+            if setting_name not in ignored_app_settings:
+                if setting.value:
+                    js_name = setting_name.replace('_', '-')
+                    if setting.type == 'check':
+                        self.js_cmd_args += 'app.commandLine.appendSwitch("'+js_name+'");\n'
+                    else:
+                        value = setting.value
+                        self.js_cmd_args += 'app.commandLine.appendSwitch("'+js_name+'", "'+value+'");\n'
+
+
+        self.js_window_init = 'var mainWindow = new BrowserWindow('+json.dumps(js_settings, indent=4)+');'
 
         s = json.dumps(dic, indent=4)
 
@@ -577,7 +578,7 @@ class CommandBase(object):
                         setting.type == 'string' or
                             setting.type == 'folder'):
                         val_str = self.convert_val_to_str(new_dic[item])
-                        setting.value = val_str
+                        setting.value = setting.convert(val_str)
                     if setting.type == 'strings':
                         strs = self.convert_val_to_str(new_dic[item]).split(',')
                         setting.value = strs
@@ -588,12 +589,14 @@ class CommandBase(object):
                         setting.value = val_str
                     if setting.type == 'range':
                         setting.value = new_dic[item]
+                    if setting.type == 'color':
+                        setting.value = new_dic[item]
                 if isinstance(new_dic[item], dict):
                     stack.append((item, new_dic[item]))
         return setting_list
 
     def selected_version(self):
-        return self.get_setting('nw_version').value
+        return self.get_setting('electron_version').value
 
     def extract_files(self):
         self.extract_error = None
@@ -606,14 +609,6 @@ class CommandBase(object):
                 if setting.value:
                     extract_path = get_data_path('files/'+setting.name)
                     setting.extract(extract_path, version)
-
-                    #if os.path.exists(save_file_path):
-                    #    setting_fbytes = setting.get_file_bytes(version)
-                    #    for dest_file, fbytes in setting_fbytes:
-                    #        path = utils.path_join(extract_path, dest_file)
-                    #        with open(path, 'wb+') as d:
-                    #            d.write(fbytes)
-                    #        self.progress_text += '.'
 
                     self.progress_text += '.'
 
@@ -679,23 +674,60 @@ class CommandBase(object):
             json_file = utils.path_join(self.project_dir(), 'package.json')
 
             global_json = utils.get_data_file_path('files/global.json')
+            js_template = get_file('files/mainjstemplate.js')
+
+            main_js_file = utils.path_join(self.project_dir(), 'main.js')
 
             if self.output_package_json:
                 with codecs.open(json_file, 'w+', encoding='utf-8') as f:
                     f.write(self.generate_json())
 
-
             with codecs.open(global_json, 'w+', encoding='utf-8') as f:
                 f.write(self.generate_json(global_json=True))
+
+            js_string = codecs.open(js_template, encoding='utf-8').read()
+
+            inject_js_start = ''
+            inject_js_end = ''
+
+            inject_start_file = self.get_setting('inject_js_start').value
+            inject_start_file = utils.path_join(self.project_dir(),
+                                                inject_start_file)
+
+            if os.path.exists(inject_start_file):
+                inject_js_start = codecs.open(inject_start_file, encoding='utf-8').read()
+
+            inject_end_file = self.get_setting('inject_js_end').value
+            inject_end_file = utils.path_join(self.project_dir(),
+                                              inject_end_file)
+
+            if os.path.exists(inject_end_file):
+                inject_js_end = codecs.open(inject_end_file, encoding='utf-8').read()
+
+            main_html = self.get_setting('main_html')
+            user_agent = self.get_setting('user_agent')
+
+            js_string = js_string.replace('{{command_line_switches}}', self.js_cmd_args)
+            js_string = js_string.replace('{{user_agent}}', '"'+user_agent.value+'"')
+            js_string = js_string.replace('{{main_html}}', main_html.value)
+            js_string = js_string.replace('{{main_window_line}}', self.js_window_init)
+            js_string = js_string.replace('{{app_name}}', self.project_name())
+            js_string = js_string.replace('{{inject_js_start}}', inject_js_start)
+            js_string = js_string.replace('{{inject_js_end}}', inject_js_end)
+
+            with codecs.open(main_js_file, 'w+', encoding='utf-8') as f:
+                f.write(js_string)
 
             zip_file = utils.path_join(temp_dir, self.project_name()+'.nw')
 
             app_nw_folder = utils.path_join(temp_dir, self.project_name()+'.nwf')
 
-            utils.copytree(self.project_dir(), app_nw_folder,
-                           ignore=shutil.ignore_patterns(output_dir))
+            if self.project_dir() in self.output_dir():
+                utils.copytree(self.project_dir(), app_nw_folder,
+                               ignore=shutil.ignore_patterns(os.path.basename(self.output_dir())))
+            else:
+                utils.copytree(self.project_dir(), app_nw_folder)
 
-            zip_files(zip_file, self.project_dir(), exclude_paths=[output_dir])
             for ex_setting in self.settings['export_settings'].values():
                 if ex_setting.value:
                     self.progress_text = '\n'
@@ -724,14 +756,9 @@ class CommandBase(object):
                         app_path = utils.path_join(export_dest,
                                                 self.project_name()+'.app')
 
-                        try:
-                            utils.move(utils.path_join(export_dest,
-                                                     'nwjs.app'),
-                                       app_path)
-                        except IOError:
-                            utils.move(utils.path_join(export_dest,
-                                                     'node-webkit.app'),
-                                       app_path)
+                        utils.move(utils.path_join(export_dest,
+                                                   'Electron.app'),
+                                   app_path)
 
                         plist_path = utils.path_join(app_path, 'Contents', 'Info.plist')
 
@@ -751,16 +778,18 @@ class CommandBase(object):
                         app_nw_res = utils.path_join(app_path,
                                                   'Contents',
                                                   'Resources',
-                                                  'app.nw')
+                                                  'default_app')
 
-                        if uncompressed:
-                            utils.copytree(app_nw_folder, app_nw_res)
-                        else:
-                            utils.copy(zip_file, app_nw_res)
+
+                        if os.path.exists(app_nw_res):
+                            utils.rmtree(app_nw_res)
+
+                        utils.copytree(app_nw_folder, app_nw_res)
+
                         self.create_icns_for_app(utils.path_join(app_path,
-                                                              'Contents',
-                                                              'Resources',
-                                                              'nw.icns'))
+                                                                 'Contents',
+                                                                 'Resources',
+                                                                 'atom.icns'))
 
                         self.progress_text += '.'
                     else:
@@ -771,7 +800,7 @@ class CommandBase(object):
                             windows = True
 
                         nw_path = utils.path_join(export_dest,
-                                               ex_setting.dest_files[0])
+                                                  ex_setting.binary_location)
 
                         if windows:
                             self.replace_icon_in_exe(nw_path)
@@ -779,18 +808,28 @@ class CommandBase(object):
                         self.compress_nw(nw_path)
 
                         dest_binary_path = utils.path_join(export_dest,
-                                                        self.project_name() +
-                                                        ext)
+                                                           self.project_name() +
+                                                           ext)
                         if 'linux' in ex_setting.name:
                             self.make_desktop_file(dest_binary_path, export_dest)
 
-                        join_files(dest_binary_path, nw_path, zip_file)
+                        utils.move(nw_path, dest_binary_path)
+
+                        app_nw_res = utils.path_join(export_dest,
+                                                     'resources',
+                                                     'default_app')
+
+                        if os.path.exists(app_nw_res):
+                            utils.rmtree(app_nw_res)
+
+                        utils.copytree(app_nw_folder, app_nw_res)
 
                         sevenfivefive = (stat.S_IRWXU |
                                          stat.S_IRGRP |
                                          stat.S_IXGRP |
                                          stat.S_IROTH |
                                          stat.S_IXOTH)
+
                         os.chmod(dest_binary_path, sevenfivefive)
 
                         self.progress_text += '.'
@@ -1047,6 +1086,8 @@ class CommandBase(object):
                                                                          os.path.sep,
                                                                          self.project_name())
             self.delete_files()
+        else:
+            print('Export failed. Check the log at {} or run again with --verbose.'.format(LOG_FILENAME))
 
     def get_export_options(self):
         options = []
@@ -1073,6 +1114,11 @@ class CommandBase(object):
             self.progress_text = 'Extracting files.'
             return self.extract_files()
 
+    def get_redirected_url(self, url):
+        opener = request.build_opener(request.HTTPRedirectHandler)
+        req = opener.open(url)
+        return req.url
+
     def download_file(self, path, setting):
         self.logger.info(u'Downloading file {}.'.format(path))
 
@@ -1080,9 +1126,7 @@ class CommandBase(object):
 
         versions = re.findall('v(\d+)\.(\d+)\.(\d+)', path)[0]
 
-        minor = int(versions[1])
-        if minor >= 12:
-            path = path.replace('node-webkit', 'nwjs')
+        path = self.get_redirected_url(path)
 
         url = path
         file_name = setting.save_file_path(self.selected_version(), location)
@@ -1099,6 +1143,7 @@ class CommandBase(object):
         forced = self.get_setting('force_download').value
 
         if (archive_exists or dest_files_exist) and not forced:
+            print('File exists.')
             self.logger.info(u'File {} already downloaded. Continuing...'.format(path))
             return self.continue_downloading_or_extract()
         elif tmp_exists and (os.stat(tmp_file).st_size > 0):
@@ -1109,7 +1154,7 @@ class CommandBase(object):
         web_file = request.urlopen(url)
         f = open(tmp_file, 'ab')
         meta = web_file.info()
-        file_size = tmp_size + int(meta.getheaders("Content-Length")[0])
+        file_size = tmp_size + int(meta["Content-Length"])
 
         version = self.selected_version()
         version_file = self.settings['base_url'].format(version)
@@ -1155,10 +1200,9 @@ class CommandBase(object):
 
     def delete_files(self):
         for ex_setting in self.settings['export_settings'].values():
-            for dest_file in ex_setting.dest_files:
-                f_path = get_data_file_path('files/{}/{}'.format(ex_setting.name, dest_file))
-                if os.path.exists(f_path):
-                    os.remove(f_path)
+            f_path = get_data_file_path('files/{}/'.format(ex_setting.name))
+            if os.path.exists(f_path):
+                utils.rmtree(f_path)
 
 
 class ArgParser(argparse.ArgumentParser):

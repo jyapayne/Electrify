@@ -11,7 +11,7 @@ import validators
 
 from PySide import QtGui, QtCore
 from PySide.QtGui import QApplication, QHBoxLayout, QVBoxLayout
-from PySide.QtNetwork import QHttp
+from PySide.QtNetwork import QHttp, QHttpRequestHeader
 from PySide.QtCore import QUrl, QFile, QIODevice, QCoreApplication
 
 from pycns import pngs_from_icns
@@ -29,6 +29,41 @@ def url_exists(path):
     if validators.url(path):
         return True
     return False
+
+class ColorDisplay(QtGui.QWidget):
+    colorChanged = QtCore.Signal(QtGui.QColor)
+
+    def __init__(self, initial, parent=None):
+        super(ColorDisplay, self).__init__(parent)
+
+        self.color = None
+        self.setColor(initial, False)
+
+    def setColor(self, color, emit=True):
+        if isinstance(color, (str, bytes)):
+            self.color = QtGui.QColor(color)
+        else:
+            self.color = color
+
+        self.update()
+
+        if emit:
+            self.colorChanged.emit(self.color)
+
+    def paintEvent(self, event=None):
+        painter = QtGui.QPainter(self)
+        if self.color is not None:
+            painter.setBrush(QtGui.QBrush(self.color))
+            rect = self.rect()
+            margins = self.contentsMargins()
+            new_rect = QtCore.QRect(rect.left()+margins.left(),
+                                    rect.top()+margins.top(),
+                                    rect.width()-margins.right()*2,
+                                    rect.height()-margins.bottom()*2)
+            painter.drawRect(new_rect)
+
+    def getColorName(self):
+        return str(self.color.name())
 
 class ExistingProjectDialog(QtGui.QDialog):
     def __init__(self, recent_projects, directory_callback, parent=None):
@@ -132,7 +167,7 @@ class BackgroundThread(QtCore.QThread):
 
 class MainWindow(QtGui.QMainWindow, CommandBase):
 
-    def update_nw_versions(self, button):
+    def update_electron_versions(self, button):
         self.get_versions_in_background()
 
     def load_recent_projects(self):
@@ -252,7 +287,7 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
         self.setWindowIcon(QtGui.QIcon(get_file('files/images/icon.png')))
         self.update_json = False
 
-        self.setup_nw_versions()
+        self.setup_electron_versions()
 
         self.thread = None
         self.original_packagejson = {}
@@ -266,22 +301,22 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
         self.option_settings_enabled(False)
 
         self.setWindowTitle(u"Web2Executable {}".format(__gui_version__))
-        self.update_nw_versions(None)
+        self.update_electron_versions(None)
 
     def open_recent_file(self):
         action = self.sender()
         if action:
             self.load_project(action.data())
 
-    def setup_nw_versions(self):
-        nw_version = self.get_setting('nw_version')
+    def setup_electron_versions(self):
+        electron_version = self.get_setting('electron_version')
         try:
-            f = codecs.open(get_data_file_path('files/nw-versions.txt'), encoding='utf-8')
+            f = codecs.open(get_data_file_path('files/electron-versions.txt'), encoding='utf-8')
             for line in f:
-                nw_version.values.append(line.strip())
+                electron_version.values.append(line.strip())
             f.close()
         except IOError:
-            nw_version.values.append(nw_version.default_value)
+            electron_version.values.append(electron_version.default_value)
 
     def create_application_layout(self):
         self.main_layout = QtGui.QVBoxLayout()
@@ -303,12 +338,14 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
         self.comp_settings_widget = self.create_compression_settings()
         self.win_settings_widget = self.create_window_settings()
         self.ex_settings_widget = self.create_export_settings()
+        self.web_prefs_widget = self.create_web_prefs_settings()
         self.dl_settings_widget = self.create_download_settings()
         self.directory_chooser_widget = self.create_directory_choose()
 
     def addWidgets_to_main_layout(self):
         self.warning_settings_icon = QtGui.QIcon(get_file('files/images/warning.png'))
         self.app_settings_icon = QtGui.QIcon(get_file('files/images/app_settings.png'))
+        self.web_prefs_icon = QtGui.QIcon(get_file('files/images/web_prefs.png'))
         self.win_settings_icon = QtGui.QIcon(get_file('files/images/window_settings.png'))
         self.ex_settings_icon = QtGui.QIcon(get_file('files/images/export_settings.png'))
         self.comp_settings_icon = QtGui.QIcon(get_file('files/images/compress_settings.png'))
@@ -316,22 +353,32 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
 
         self.tab_icons = [self.app_settings_icon,
                           self.win_settings_icon,
+                          self.web_prefs_icon,
                           self.ex_settings_icon,
                           self.comp_settings_icon,
                           self.download_settings_icon]
 
         self.main_layout.addWidget(self.directory_chooser_widget)
+
         self.tab_widget.addTab(self.app_settings_widget,
                                self.app_settings_icon,
                                'App Settings')
+
         self.tab_widget.addTab(self.win_settings_widget,
                                self.win_settings_icon,
                                'Window Settings')
+
+        self.tab_widget.addTab(self.web_prefs_widget,
+                               self.web_prefs_icon,
+                               'Web Preferences')
+
         self.tab_widget.addTab(self.ex_settings_widget,
                                self.ex_settings_icon, 'Export Settings')
+
         self.tab_widget.addTab(self.comp_settings_widget,
                                self.comp_settings_icon,
                                'Compression Settings')
+
         self.tab_widget.addTab(self.dl_settings_widget,
                                self.download_settings_icon,
                                'Download Settings')
@@ -344,6 +391,7 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
         self.app_settings_widget.setEnabled(is_enabled)
         self.win_settings_widget.setEnabled(is_enabled)
         self.ex_settings_widget.setEnabled(is_enabled)
+        self.web_prefs_widget.setEnabled(is_enabled)
         self.comp_settings_widget.setEnabled(is_enabled)
         self.dl_settings_widget.setEnabled(is_enabled)
         self.options_enabled = is_enabled
@@ -372,7 +420,7 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
                                            'the export options!'))
 
     def selected_version(self):
-        return self.get_setting('nw_version').value
+        return self.get_setting('electron_version').value
 
     def enable_ui_after_error(self):
         self.enable_ui()
@@ -395,10 +443,11 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
         options_dict = {'app_settings': 0,
                         'webkit_settings': 0,
                         'window_settings': 1,
-                        'export_settings': 2,
-                        'web2exe_settings': 2,
-                        'compression': 3,
-                        'download_settings': 4}
+                        'web_preferences': 2,
+                        'export_settings': 3,
+                        'web2exe_settings': 3,
+                        'compression': 4,
+                        'download_settings': 5}
         for setting_group_name, setting_group in self._setting_items:
             if name in setting_group:
                 return options_dict.get(setting_group_name, None)
@@ -428,7 +477,7 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
                         self.tab_widget.setTabIcon(tab, self.warning_settings_icon)
 
                 if (setting.type == 'file' and
-                        setting.value):
+                        setting.value and setting.exists):
                     setting_path_invalid = not os.path.exists(setting_path)
                     setting_url_invalid = not url_exists(setting.value)
                     if setting_path_invalid and setting_url_invalid:
@@ -487,9 +536,6 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
 
     def project_dir(self):
         return self.project_path
-        if hasattr(self, 'input_line'):
-            return self.input_line.text()
-        return ''
 
     def output_dir(self):
         if hasattr(self, 'output_line'):
@@ -549,6 +595,7 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
         self.open_export_button = open_export_button
 
         http = QHttp(self)
+        http.sslErrors.connect(self.https_error)
         http.requestFinished.connect(self.http_request_finished)
         http.dataReadProgress.connect(self.update_progress_bar)
         http.responseHeaderReceived.connect(self.read_response_header)
@@ -556,6 +603,9 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
         self.ex_button = ex_button
 
         return hlayout
+
+    def https_error(self, errors):
+        print(errors)
 
     def read_response_header(self, response_header):
         # Check for genuine error conditions.
@@ -620,11 +670,11 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
         self.ex_button.setEnabled(self.required_settings_filled())
         self.progress_text = 'Done retrieving versions.'
 
-        nw_version = self.get_setting('nw_version')
-        combo = self.find_child_by_name(nw_version.name)
+        electron_version = self.get_setting('electron_version')
+        combo = self.find_child_by_name(electron_version.name)
 
         combo.clear()
-        combo.addItems(nw_version.values)
+        combo.addItems(electron_version.values)
 
     def make_output_files_in_background(self):
         self.ex_button.setEnabled(False)
@@ -696,22 +746,14 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
 
         versions = re.findall('v(\d+)\.(\d+)\.(\d+)', path)[0]
 
-        minor = int(versions[1])
-        if minor >= 12:
-            path = path.replace('node-webkit', 'nwjs')
-
         self.progress_text = u'Downloading {}'.format(path.replace(version_file, ''))
+
+        path = self.get_redirected_url(path)
 
         url = QUrl(path)
         file_name = setting.save_file_path(self.selected_version(), location)
 
         archive_exists = QFile.exists(file_name)
-
-        #dest_files_exist = False
-
-        # for dest_file in setting.dest_files:
-        #    dest_file_path = utils.path_join('files', setting.name, dest_file)
-        #    dest_files_exist &= QFile.exists(dest_file_path)
 
         forced = self.get_setting('force_download').value
 
@@ -728,21 +770,17 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
             self.enable_ui()
             return
 
-        mode = QHttp.ConnectionModeHttp
+        mode = QHttp.ConnectionModeHttps
         port = url.port()
+
         if port == -1:
             port = 0
+
         self.http.setHost(url.host(), mode, port)
         self.http_request_aborted = False
 
-        path = QUrl.toPercentEncoding(url.path(), "!$&'()*+,;=:@/")
-        if path:
-            path = str(path)
-        else:
-            path = u'/'
-
         # Download the file.
-        self.http_get_id = self.http.get(path, self.out_file)
+        self.http_get_id = self.http.get(path, to=self.out_file)
 
     def create_icon_box(self, name, text):
         style = 'width:48px;height:48px;background-color:white;border-radius:5px;border:1px solid rgb(50,50,50);'
@@ -889,7 +927,7 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
         proj_name = os.path.basename(directory)
         self.title_label.setText(proj_name)
 
-        setting_input = self.find_child_by_name('main')
+        setting_input = self.find_child_by_name('main_html')
         files = (glob.glob(utils.path_join(directory, 'index.html')) +
                  glob.glob(utils.path_join(directory, 'index.php')) +
                  glob.glob(utils.path_join(directory, 'index.htm')))
@@ -898,12 +936,7 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
                 setting_input.setText(files[0].replace(self.project_dir() + os.path.sep, ''))
 
         app_name_input = self.find_child_by_name('app_name')
-        name_input = self.find_child_by_name('name')
-        name_setting = self.get_setting('name')
         title_input = self.find_child_by_name('title')
-
-        if not name_input.text():
-            name_input.setText(name_setting.filter_name(proj_name))
 
         if not app_name_input.text():
             app_name_input.setText(proj_name)
@@ -947,6 +980,12 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
             file_path = file_path.replace(self.project_dir()+os.path.sep, '')
             text_obj.setText(file_path)
             setting.last_value = file_path
+
+    def get_color(self, obj, color_disp, initial, setting, *args, **kwargs):
+        color = QtGui.QColorDialog.getColor(QtGui.QColor(initial), obj, 'Choose Color')
+        if color:
+            color_disp.setColor(color)
+            setting.last_value = color.name()
 
     def get_file_reg(self, obj, text_obj, setting, file_types, *args, **kwargs):
         file_path, _ = QtGui.QFileDialog.getOpenFileName(self, 'Choose File',
@@ -1002,10 +1041,22 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
             return self.create_list_setting(name)
         elif setting.type == 'range':
             return self.create_range_setting(name)
+        elif setting.type == 'color':
+            return self.create_color_setting(name)
+        else:
+            print('Setting "{}" type "{}" not defined.'.format(name, setting.type))
+            return QtGui.QHBoxLayout()
 
     def create_window_settings(self):
         group_box = QtGui.QWidget()
         vlayout = self.create_layout(self.settings['order']['window_setting_order'], cols=3)
+
+        group_box.setLayout(vlayout)
+        return group_box
+
+    def create_web_prefs_settings(self):
+        group_box = QtGui.QWidget()
+        vlayout = self.create_layout(self.settings['order']['web_prefs_order'], cols=3)
 
         group_box.setLayout(vlayout)
         return group_box
@@ -1097,8 +1148,8 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
             setting_label.setToolTip(setting.description)
             setting_label.setStatusTip(setting.description)
             glayout.addWidget(setting_label, row, col)
-            glayout.addLayout(self.create_setting(setting_name),
-                              row, col+1)
+            sett = self.create_setting(setting_name)
+            glayout.addLayout(sett, row, col+1)
             col += 2
 
         return glayout
@@ -1115,7 +1166,7 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
         text.textChanged.connect(self.call_with_object('setting_changed',
                                                        text, setting))
         if setting.value:
-            text.setText(setting.value)
+            text.setText(str(setting.value))
         text.setStatusTip(setting.description)
         text.setToolTip(setting.description)
 
@@ -1147,6 +1198,37 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
                                                         text, setting))
 
         hlayout.addWidget(text)
+        hlayout.addWidget(button)
+
+        return hlayout
+
+    def create_color_setting(self, name):
+        hlayout = QtGui.QHBoxLayout()
+
+        setting = self.get_setting(name)
+
+        color_disp = ColorDisplay(setting.value or setting.default_value)
+        color_disp.setObjectName(setting.name)
+        color_disp.setContentsMargins(5, 5, 5, 5)
+
+        button = QtGui.QPushButton('Choose...')
+        button.setMaximumWidth(100)
+        button.setMaximumHeight(26)
+
+        button.clicked.connect(self.call_with_object('get_color', button,
+                                                     color_disp,
+                                                     setting.value or setting.default_value,
+                                                     setting))
+
+        if setting.value:
+            color_disp.setColor(setting.value)
+        color_disp.setStatusTip(setting.description)
+        color_disp.setToolTip(setting.description)
+
+        color_disp.colorChanged.connect(self.call_with_object('setting_changed',
+                                                              color_disp, setting))
+
+        hlayout.addWidget(color_disp)
         hlayout.addWidget(button)
 
         return hlayout
@@ -1218,6 +1300,12 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
                         old_val = setting.default_value
                     setting.value = old_val
                     widget.setValue(old_val)
+                elif setting.type == 'color':
+                    old_val = ''
+                    if setting.default_value is not None:
+                        old_val = setting.default_value
+                    setting.value = old_val
+                    widget.setColor(setting.value)
 
     def set_kiosk_emulation_options(self, is_checked):
         if is_checked:
@@ -1252,7 +1340,7 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
         if (setting.type == 'string' or
             setting.type == 'file' or
                 setting.type == 'folder'):
-            setting.value = args[0]
+            setting.value = setting.convert(args[0])
         elif setting.type == 'strings':
             setting.value = args[0].split(',')
         elif setting.type == 'check':
@@ -1264,6 +1352,8 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
             setting.value = obj.currentText()
         elif setting.type == 'range':
             setting.value = obj.value()
+        elif setting.type == 'color':
+            setting.value = args[0].name()
 
         if setting.action is not None:
             action = getattr(self, setting.action, None)
@@ -1362,16 +1452,17 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
         slider.valueChanged.connect(self.call_with_object('setting_changed',
                                                           slider, setting))
 
+        slider.setMinimumWidth(60)
         slider.setObjectName(setting.name)
         slider.setValue(setting.default_value)
         slider.setStatusTip(setting.description)
         slider.setToolTip(setting.description)
 
         range_label = QtGui.QLabel(str(setting.default_value))
-        range_label.setMaximumWidth(30)
+        range_label.setMaximumWidth(45)
 
         slider.valueChanged.connect(self.call_with_object('_update_range_label',
-                                                          range_label))
+                                                          range_label, setting))
 
         w = QtGui.QWidget()
         whlayout = QtGui.QHBoxLayout()
@@ -1383,8 +1474,8 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
 
         return hlayout
 
-    def _update_range_label(self, label, value):
-        label.setText(str(value))
+    def _update_range_label(self, label, setting, value):
+        label.setText(str(value)+setting.label_suffix)
 
     def load_package_json(self, json_path=None):
         setting_list = super(MainWindow, self).load_package_json(json_path)
@@ -1408,6 +1499,8 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
                         setting_field.setCurrentIndex(index)
                 if setting.type == 'range':
                     setting_field.setValue(int(setting.value))
+                if setting.type == 'color':
+                    setting_field.setColor(setting.value)
         self.ex_button.setEnabled(self.required_settings_filled())
 
     def show_and_raise(self):
@@ -1425,7 +1518,7 @@ if __name__ == '__main__':
     QCoreApplication.setOrganizationName("SimplyPixelated")
     QCoreApplication.setOrganizationDomain("simplypixelated.com")
 
-    frame = MainWindow(900, 500, app)
+    frame = MainWindow(1000, 500, app)
     frame.show_and_raise()
 
     sys.exit(app.exec_())
