@@ -19,6 +19,10 @@ def is_windows():
 def get_temp_dir():
     return tempfile.gettempdir()
 
+def to_camel_case(underscore):
+    res = ''.join(x.capitalize() or '_' for x in underscore.split('_'))
+    return res[:1].lower() + res[1:]
+
 def path_join(base, *rest):
     new_rest = []
     for i in range(len(rest)):
