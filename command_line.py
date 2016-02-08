@@ -1,4 +1,4 @@
-'''Command line module for web2exe.'''
+'''Command line module for electrify.'''
 
 import ssl
 
@@ -104,15 +104,6 @@ except:
     pass
 
 
-def get_base_url():
-    url = None
-    try:
-        url = codecs.open(get_file('files', 'base_url.txt'), encoding='utf-8').read().strip()
-    except (OSError, IOError):
-        url = 'http://dl.node-webkit.org/v{}/'
-    return url
-
-
 class Setting(object):
     def __init__(self, name='', display_name=None, value=None,
                  required=False, type=None, file_types=None, *args, **kwargs):
@@ -146,6 +137,8 @@ class Setting(object):
             convert = eval(convert)
 
         def conv(x):
+            if x is None or x == '':
+                return x
             try:
                 x = convert(x)
             except ValueError:
@@ -203,8 +196,6 @@ class Setting(object):
             versions = re.findall('(\d+)\.(\d+)\.(\d+)', version)[0]
 
             minor = int(versions[1])
-            if minor >= 12:
-                path = path.replace('node-webkit', 'nwjs')
 
             return path
 
@@ -489,7 +480,7 @@ class CommandBase(object):
             dl_export_items = (list(self.settings['download_settings'].items()) +
                                list(self.settings['export_settings'].items()) +
                                list(self.settings['compression'].items()) +
-                               list(self.settings['web2exe_settings'].items()))
+                               list(self.settings['electrify_settings'].items()))
         else:
             dl_export_items = (list(self.settings['download_settings'].items()) +
                                list(self.settings['export_settings'].items()) +
@@ -720,13 +711,13 @@ class CommandBase(object):
 
             zip_file = utils.path_join(temp_dir, self.project_name()+'.nw')
 
-            app_nw_folder = utils.path_join(temp_dir, self.project_name()+'.nwf')
+            app_electron_folder = utils.path_join(temp_dir, self.project_name()+'.nwf')
 
             if self.project_dir() in self.output_dir():
-                utils.copytree(self.project_dir(), app_nw_folder,
+                utils.copytree(self.project_dir(), app_electron_folder,
                                ignore=shutil.ignore_patterns(os.path.basename(self.output_dir())))
             else:
-                utils.copytree(self.project_dir(), app_nw_folder)
+                utils.copytree(self.project_dir(), app_electron_folder)
 
             for ex_setting in self.settings['export_settings'].values():
                 if ex_setting.value:
@@ -737,8 +728,6 @@ class CommandBase(object):
                     versions = re.findall('(\d+)\.(\d+)\.(\d+)', self.selected_version())[0]
 
                     minor = int(versions[1])
-                    if minor >= 12:
-                        export_dest = export_dest.replace('node-webkit', 'nwjs')
 
                     if os.path.exists(export_dest):
                         utils.rmtree(export_dest, ignore_errors=True)
@@ -775,16 +764,16 @@ class CommandBase(object):
 
                         self.progress_text += '.'
 
-                        app_nw_res = utils.path_join(app_path,
+                        app_electron_res = utils.path_join(app_path,
                                                   'Contents',
                                                   'Resources',
                                                   'default_app')
 
 
-                        if os.path.exists(app_nw_res):
-                            utils.rmtree(app_nw_res)
+                        if os.path.exists(app_electron_res):
+                            utils.rmtree(app_electron_res)
 
-                        utils.copytree(app_nw_folder, app_nw_res)
+                        utils.copytree(app_electron_folder, app_electron_res)
 
                         self.create_icns_for_app(utils.path_join(app_path,
                                                                  'Contents',
@@ -799,13 +788,13 @@ class CommandBase(object):
                             ext = '.exe'
                             windows = True
 
-                        nw_path = utils.path_join(export_dest,
+                        electron_path = utils.path_join(export_dest,
                                                   ex_setting.binary_location)
 
                         if windows:
-                            self.replace_icon_in_exe(nw_path)
+                            self.replace_icon_in_exe(electron_path)
 
-                        self.compress_nw(nw_path)
+                        self.compress_nw(electron_path)
 
                         dest_binary_path = utils.path_join(export_dest,
                                                            self.project_name() +
@@ -813,16 +802,16 @@ class CommandBase(object):
                         if 'linux' in ex_setting.name:
                             self.make_desktop_file(dest_binary_path, export_dest)
 
-                        utils.move(nw_path, dest_binary_path)
+                        utils.move(electron_path, dest_binary_path)
 
-                        app_nw_res = utils.path_join(export_dest,
+                        app_electron_res = utils.path_join(export_dest,
                                                      'resources',
                                                      'default_app')
 
-                        if os.path.exists(app_nw_res):
-                            utils.rmtree(app_nw_res)
+                        if os.path.exists(app_electron_res):
+                            utils.rmtree(app_electron_res)
 
-                        utils.copytree(app_nw_folder, app_nw_res)
+                        utils.copytree(app_electron_folder, app_electron_res)
 
                         sevenfivefive = (stat.S_IRWXU |
                                          stat.S_IRGRP |
@@ -834,8 +823,8 @@ class CommandBase(object):
 
                         self.progress_text += '.'
 
-                        if os.path.exists(nw_path):
-                            os.remove(nw_path)
+                        if os.path.exists(electron_path):
+                            os.remove(electron_path)
 
         except Exception:
             error = u''.join([x for x in traceback.format_exception(sys.exc_info()[0],
@@ -846,7 +835,7 @@ class CommandBase(object):
         finally:
             utils.rmtree(temp_dir, onerror=self.remove_readonly)
 
-    def make_desktop_file(self, nw_path, export_dest):
+    def make_desktop_file(self, electron_path, export_dest):
         icon_set = self.get_setting('icon')
         icon_path = utils.path_join(self.project_dir(), icon_set.value)
         if os.path.exists(icon_path) and icon_set.value:
@@ -873,15 +862,15 @@ class CommandBase(object):
         file_str = file_str.format(version.value,
                                    name,
                                    desc.value,
-                                   nw_path,
+                                   electron_path,
                                    icon_path)
         with codecs.open(dfile_path, 'w+', encoding='utf-8') as f:
             f.write(file_str)
 
         os.chmod(dfile_path, 0o755)
 
-    def compress_nw(self, nw_path):
-        compression = self.get_setting('nw_compression_level')
+    def compress_nw(self, electron_path):
+        compression = self.get_setting('electron_compression_level')
         if compression.value == 0:
             return
 
@@ -903,7 +892,7 @@ class CommandBase(object):
         if upx_version is not None:
             upx_bin = upx_version
             os.chmod(upx_bin, 0o755)
-            cmd = [upx_bin, '--lzma', u'-{}'.format(compression.value), nw_path]
+            cmd = [upx_bin, '--lzma', u'-{}'.format(compression.value), electron_path]
             if platform.system() == 'Windows':
                 startupinfo = subprocess.STARTUPINFO()
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
@@ -1216,8 +1205,8 @@ def unicode_arg(bytestring):
 
 def main():
     parser = ArgParser(description=('Command line interface '
-                                    'to web2exe. {}'.format(__version__)),
-                                     prog='web2execmd')
+                                    'to electrify. {}'.format(__version__)),
+                                     prog='electrifycmd')
     command_base = CommandBase()
     command_base.init()
     parser.add_argument('project_dir', metavar='project_dir',

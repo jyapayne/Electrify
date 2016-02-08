@@ -300,7 +300,7 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
 
         self.option_settings_enabled(False)
 
-        self.setWindowTitle(u"Web2Executable {}".format(__gui_version__))
+        self.setWindowTitle(u"Electrify {}".format(__gui_version__))
         self.update_electron_versions(None)
 
     def open_recent_file(self):
@@ -445,7 +445,7 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
                         'window_settings': 1,
                         'web_preferences': 2,
                         'export_settings': 3,
-                        'web2exe_settings': 3,
+                        'electrify_settings': 3,
                         'compression': 4,
                         'download_settings': 5}
         for setting_group_name, setting_group in self._setting_items:
@@ -459,7 +459,7 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
         red_border = 'QLineEdit{border:3px solid rgba(238, 68, 83, 200); border-radius:5px;}'
 
         settings_valid = True
-        for sgroup in self.settings['setting_groups']+[self.settings['web2exe_settings']]:
+        for sgroup in self.settings['setting_groups']+[self.settings['electrify_settings']]:
             for sname, setting in sgroup.items():
                 if setting.type in set(['file', 'folder']) and os.path.isabs(setting.value):
                     setting_path = setting.value
@@ -1513,7 +1513,7 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
 
-    QCoreApplication.setApplicationName("Web2Executable")
+    QCoreApplication.setApplicationName("Electrify")
     QCoreApplication.setApplicationVersion(__gui_version__)
     QCoreApplication.setOrganizationName("SimplyPixelated")
     QCoreApplication.setOrganizationDomain("simplypixelated.com")

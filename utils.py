@@ -39,7 +39,7 @@ def path_join(base, *rest):
 
 def get_data_path(dir_path):
     parts = dir_path.split('/')
-    dirs = AppDirs('Web2Executable', 'Web2Executable')
+    dirs = AppDirs('Electrify', 'Electrify')
     data_path = path_join(dirs.user_data_dir, *parts)
 
     if is_windows():

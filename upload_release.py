@@ -15,7 +15,7 @@ def main():
     with open('files/version.txt') as f:
         version = f.read().strip()
 
-    base_url = 'https://api.github.com/repos/jyapayne/Web2Executable/releases'
+    base_url = 'https://api.github.com/repos/jyapayne/Electrify/releases'
 
     req = requests.get(base_url+'/tags/'+version)
 
@@ -42,7 +42,7 @@ def main():
         print('Creating release:', version)
         data = {'tag_name': version,
                 'target_commitish': 'master',
-                'name': 'Web2Executable ' + version}
+                'name': 'Electrify ' + version}
         post_res = requests.post(base_url, data=json.dumps(data), auth=(github_user, password))
         if post_res.status_code == 201:
             json_data = json.loads(post_res.text)

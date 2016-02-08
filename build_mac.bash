@@ -1,34 +1,34 @@
 VERSION=$(cat files/version.txt)
 
-rm -rf Web2ExeMac*
+rm -rf ElectrifyMac*
 rm  files/error.log files/last_project_path.txt files/recent_files.txt
 rm -rf files/downloads/*
-rm -rf Web2ExeMac-CMD/files
-pyinstaller --hidden-import PIL.Jpeg2KImagePlugin --hidden-import configobj --hidden-import pkg_resources --distpath Web2ExeMac-CMD --onefile -n web2exe-mac command_line.py
-cp -rf files Web2ExeMac-CMD/files/
+rm -rf ElectrifyMac-CMD/files
+pyinstaller --hidden-import PIL.Jpeg2KImagePlugin --hidden-import configobj --hidden-import pkg_resources --distpath ElectrifyMac-CMD --onefile -n electrify-mac command_line.py
+cp -rf files ElectrifyMac-CMD/files/
 
-rm -rf build dist Web2Executable.app
+rm -rf build dist Electrifycutable.app
 
 #sudo python build_mac_setup.py py2app --iconfile icon.icns 
-pyinstaller -w --hidden-import PIL.Jpeg2KImagePlugin --hidden-import PyQt4 --hidden-import PIL --hidden-import configobj --hidden-import pkg_resources --distpath Web2ExeMac --onefile -n Web2Executable main.py
+pyinstaller -w --hidden-import PIL.Jpeg2KImagePlugin --hidden-import PyQt4 --hidden-import PIL --hidden-import configobj --hidden-import pkg_resources --distpath ElectrifyMac --onefile -n Electrifycutable main.py
 
-#sudo chown -R joey dist/Web2Executable.app
+#sudo chown -R joey dist/Electrifycutable.app
 #sudo chown -R joey dist/ build/
-#mv dist/Web2Executable.app Web2Executable.app
+#mv dist/Electrifycutable.app Electrifycutable.app
 
-mv Web2ExeMac/Web2Executable.app .
+mv ElectrifyMac/Electrifycutable.app .
 
-#rm -rf Web2Executable.app/Contents/Frameworks/QtDesigner*
-#rm -rf Web2Executable.app/Contents/Frameworks/QtXml*
-#rm -rf Web2Executable.app/Contents/Frameworks/QtWebKit*
-#rm -rf Web2Executable.app/Contents/Frameworks/QtScript*
+#rm -rf Electrifycutable.app/Contents/Frameworks/QtDesigner*
+#rm -rf Electrifycutable.app/Contents/Frameworks/QtXml*
+#rm -rf Electrifycutable.app/Contents/Frameworks/QtWebKit*
+#rm -rf Electrifycutable.app/Contents/Frameworks/QtScript*
 
-cp icon.icns Web2Executable.app/Contents/Resources/icon-windowed.icns
-cp -rf files Web2Executable.app/Contents/MacOS/
+cp icon.icns Electrifycutable.app/Contents/Resources/icon-windowed.icns
+cp -rf files Electrifycutable.app/Contents/MacOS/
 
 rm -rf build dist
 
-/Applications/Keka.app/Contents/Resources/keka7z a -r Web2ExeMac-CMD.zip Web2ExeMac-CMD
-/Applications/Keka.app/Contents/Resources/keka7z a -r Web2ExeMac-${VERSION}.zip Web2Executable.app
+/Applications/Keka.app/Contents/Resources/keka7z a -r ElectrifyMac-CMD.zip ElectrifyMac-CMD
+/Applications/Keka.app/Contents/Resources/keka7z a -r ElectrifyMac-${VERSION}.zip Electrifycutable.app
 
 python upload_release.py
