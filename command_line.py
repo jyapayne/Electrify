@@ -685,14 +685,14 @@ class CommandBase(object):
             inject_start_file = utils.path_join(self.project_dir(),
                                                 inject_start_file)
 
-            if os.path.exists(inject_start_file):
+            if os.path.isfile(inject_start_file):
                 inject_js_start = codecs.open(inject_start_file, encoding='utf-8').read()
 
             inject_end_file = self.get_setting('inject_js_end').value
             inject_end_file = utils.path_join(self.project_dir(),
                                               inject_end_file)
 
-            if os.path.exists(inject_end_file):
+            if os.path.isfile(inject_end_file):
                 inject_js_end = codecs.open(inject_end_file, encoding='utf-8').read()
 
             main_html = self.get_setting('main_html')

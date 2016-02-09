@@ -863,7 +863,8 @@ class MainWindow(QtGui.QMainWindow, CommandBase):
                 if icon_path.endswith('.icns'):
                     pngs = pngs_from_icns(icon_path)
                     if pngs:
-                        image = QtGui.QImage.fromData(QtCore.QByteArray(pngs[-1].data), 'PNG')
+                        ba = QtCore.QByteArray(pngs[-1].data)
+                        image = QtGui.QImage.fromData(ba, 'PNG')
                     else:
                         return
                 else:
