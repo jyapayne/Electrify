@@ -1316,10 +1316,6 @@ def main():
     if args.app_name is None:
         args.app_name = command_base.project_name()
 
-    if args.name is not None:
-        setting = command_base.get_setting('name')
-        args.name = setting.filter_name(args.name if not callable(args.name) else args.name())
-
     command_base._project_name = args.app_name if not callable(args.app_name) else args.app_name()
 
     if not args.title:
