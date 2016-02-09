@@ -275,7 +275,7 @@ class CommandBase(object):
         self.setup_electron_versions()
 
     def update_electron_versions(self, button):
-        self.progress_text = 'Updating nw versions...'
+        self.progress_text = 'Updating electron versions...'
         self.get_versions()
         self.progress_text = '\nDone.\n'
 
