@@ -1,4 +1,5 @@
-#NOTICE
+NOTICE
+======
 
 This app is unmaintained. I do not have the resources to work on it any longer and haven't for a long time. If anyone would like to sponsor this project or take up ownership from me, I'd be glad to do either.
 
